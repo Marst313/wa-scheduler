@@ -64,7 +64,7 @@ The compose file maps **`host.docker.internal`** to your host (via `extra_hosts`
 
 ### Production
 
-WA Scheduler is **self-hosted**. One starting point is the Docker Compose setup under [`deploy/aws/ec2/docker-compose.yml`](./deploy/aws/ec2/docker-compose.yml): set the `IDN_REMOTE_SCHEDULER_*` environment variables expected there (dashboard credentials, publisher URL, SQLite path on the volume, etc.), then from the repo root run **`make deploy-ec2-wa-scheduler`** (see [`Makefile`](./Makefile)). Adapt networking and secrets for your environment—there is no managed SaaS for this project.
+WA Scheduler is **self-hosted**; there is no hosted SaaS. Deploy by building [`build/package/Dockerfile`](./build/package/Dockerfile) or by adapting [`deploy/local/run/docker-compose.yml`](./deploy/local/run/docker-compose.yml): set the [environment variables](#environment-variables) (`DASHBOARD_CLIENT_*`, `WA_PUBLISHER_*`, `DB_PATH`, persistence volume, etc.), wire your publisher URL, and expose the listen port (default `9866`).
 
 For broader deployment notes or questions, check [existing issues](https://github.com/ghazlabs/wa-scheduler/issues) or open a new one.
 
