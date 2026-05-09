@@ -12,12 +12,12 @@ import (
 	"github.com/ghazlabs/wa-scheduler/internal/core"
 	wa "github.com/ghazlabs/wa-scheduler/internal/driven/publisher"
 	"github.com/ghazlabs/wa-scheduler/internal/driven/scheduler"
-	mysql "github.com/ghazlabs/wa-scheduler/internal/driven/storage"
+	"github.com/ghazlabs/wa-scheduler/internal/driven/storage"
 	"github.com/ghazlabs/wa-scheduler/internal/driver"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/go-resty/resty/v2"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
@@ -47,29 +47,29 @@ func main() {
 		}
 	}()
 
-	mysqlClient, err := sql.Open("mysql", cfg.MysqlDSN)
+	dbClient, err := sql.Open("sqlite", cfg.DBPath)
 	if err != nil {
-		log.Fatalf("failed to initialize mysql client: %v", err)
+		log.Fatalf("failed to initialize sqlite client: %v", err)
 	}
 
-	storage, err := mysql.NewMySQLStorage(mysql.MySQLStorageConfig{
-		DB: mysqlClient,
+	messageStorage, err := storage.NewStorage(storage.StorageConfig{
+		DB: dbClient,
 	})
 	if err != nil {
-		log.Fatalf("failed to initialize MySQL storage: %v", err)
+		log.Fatalf("failed to initialize storage: %v", err)
 	}
 
 	gocronScheduler, err := scheduler.NewGoCronScheduler(scheduler.GoCronSchedulerConfig{
 		Client:    gocronClient,
 		Publisher: waPublisher,
-		Storage:   storage,
+		Storage:   messageStorage,
 	})
 	if err != nil {
 		log.Fatalf("failed to create gocron scheduler: %v", err)
 	}
 
 	service, err := core.NewService(core.ServiceConfig{
-		Storage:   storage,
+		Storage:   messageStorage,
 		Scheduler: gocronScheduler,
 	})
 	if err != nil {
@@ -106,7 +106,7 @@ func main() {
 type config struct {
 	ListenPort string `env:"LISTEN_PORT,required" envDefault:"9866"`
 
-	MysqlDSN string `env:"MYSQL_DSN,required"`
+	DBPath string `env:"DB_PATH,required" envDefault:"/data/wa-scheduler.db"`
 
 	ClientUsername string `env:"DASHBOARD_CLIENT_USERNAME,required"`
 	ClientPassword string `env:"DASHBOARD_CLIENT_PASSWORD,required"`

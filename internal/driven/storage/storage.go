@@ -1,11 +1,10 @@
-package mysql
+package storage
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/ghazlabs/wa-scheduler/internal/core"
 	"gopkg.in/validator.v2"
@@ -15,25 +14,52 @@ const (
 	tableSchedule = "messages"
 )
 
-type MySQLStorageConfig struct {
+type StorageConfig struct {
 	DB *sql.DB `validate:"nonnil"`
 }
 
-type MySQLStorage struct {
-	MySQLStorageConfig
+type Storage struct {
+	StorageConfig
 }
 
-func NewMySQLStorage(cfg MySQLStorageConfig) (*MySQLStorage, error) {
-	err := validator.Validate(cfg)
-	if err != nil {
+func NewStorage(cfg StorageConfig) (*Storage, error) {
+	if err := validator.Validate(cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
-	return &MySQLStorage{
-		MySQLStorageConfig: cfg,
-	}, nil
+
+	s := &Storage{
+		StorageConfig: cfg,
+	}
+
+	if err := s.ensureSchema(); err != nil {
+		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+	}
+
+	return s, nil
 }
 
-func (s *MySQLStorage) GetAllMessages(ctx context.Context, input core.GetAllMessagesInput) ([]core.Message, error) {
+func (s *Storage) ensureSchema() error {
+	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		id TEXT PRIMARY KEY,
+		content TEXT NOT NULL,
+		recipient_numbers TEXT NOT NULL,
+		scheduled_sending_at INTEGER,
+		sent_at INTEGER,
+		retried_count INTEGER DEFAULT 0,
+		status TEXT,
+		reason TEXT DEFAULT NULL,
+		created_at INTEGER NOT NULL DEFAULT (strftime('%%s','now')),
+		updated_at INTEGER NOT NULL DEFAULT (strftime('%%s','now'))
+	);`, tableSchedule)
+
+	if _, err := s.DB.Exec(query); err != nil {
+		return fmt.Errorf("failed to create table: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetAllMessages(ctx context.Context, input core.GetAllMessagesInput) ([]core.Message, error) {
 	query := fmt.Sprintf(`SELECT
 		id,
 		content,
@@ -70,36 +96,33 @@ func (s *MySQLStorage) GetAllMessages(ctx context.Context, input core.GetAllMess
 	messages := make([]core.Message, 0)
 	for rows.Next() {
 		var msg core.Message
-		var recipientNumbers, createdAt, updatedAt string
+		var recipientNumbers string
+		var sentAt sql.NullInt64
+		var reason sql.NullString
+
 		err := rows.Scan(
 			&msg.ID,
 			&msg.Content,
 			&recipientNumbers,
 			&msg.ScheduledSendingAt,
-			&msg.SentAt,
+			&sentAt,
 			&msg.RetriedCount,
 			&msg.Status,
-			&msg.Reason,
-			&createdAt,
-			&updatedAt,
+			&reason,
+			&msg.CreatedAt,
+			&msg.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 
 		msg.RecipientNumbers = strings.Split(recipientNumbers, ",")
-
-		t, err := time.Parse(time.RFC3339, createdAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse created_at timestamp: %w", err)
+		if sentAt.Valid {
+			msg.SentAt = &sentAt.Int64
 		}
-		msg.CreatedAt = t.Unix()
-
-		t, err = time.Parse(time.RFC3339, updatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse updated_at timestamp: %w", err)
+		if reason.Valid {
+			msg.Reason = &reason.String
 		}
-		msg.UpdatedAt = t.Unix()
 
 		messages = append(messages, msg)
 	}
@@ -110,7 +133,8 @@ func (s *MySQLStorage) GetAllMessages(ctx context.Context, input core.GetAllMess
 
 	return messages, nil
 }
-func (s *MySQLStorage) GetMessage(ctx context.Context, id string) (*core.Message, error) {
+
+func (s *Storage) GetMessage(ctx context.Context, id string) (*core.Message, error) {
 	query := fmt.Sprintf(`SELECT
 		id,
 		content,
@@ -127,18 +151,21 @@ func (s *MySQLStorage) GetMessage(ctx context.Context, id string) (*core.Message
 	row := s.DB.QueryRowContext(ctx, query, id)
 
 	var msg core.Message
-	var recipientNumbers, createdAt, updatedAt string
+	var recipientNumbers string
+	var sentAt sql.NullInt64
+	var reason sql.NullString
+
 	err := row.Scan(
 		&msg.ID,
 		&msg.Content,
 		&recipientNumbers,
 		&msg.ScheduledSendingAt,
-		&msg.SentAt,
+		&sentAt,
 		&msg.RetriedCount,
 		&msg.Status,
-		&msg.Reason,
-		&createdAt,
-		&updatedAt,
+		&reason,
+		&msg.CreatedAt,
+		&msg.UpdatedAt,
 	)
 
 	if err != nil {
@@ -149,26 +176,28 @@ func (s *MySQLStorage) GetMessage(ctx context.Context, id string) (*core.Message
 	}
 
 	msg.RecipientNumbers = strings.Split(recipientNumbers, ",")
-
-	t, err := time.Parse("2006-01-02 15:04:05", createdAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse created_at timestamp: %w", err)
+	if sentAt.Valid {
+		msg.SentAt = &sentAt.Int64
 	}
-	msg.CreatedAt = t.Unix()
-
-	t, err = time.Parse("2006-01-02 15:04:05", updatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse updated_at timestamp: %w", err)
+	if reason.Valid {
+		msg.Reason = &reason.String
 	}
-	msg.UpdatedAt = t.Unix()
 
 	return &msg, nil
 }
 
-func (s *MySQLStorage) SaveMessage(ctx context.Context, message core.Message) error {
+func (s *Storage) SaveMessage(ctx context.Context, message core.Message) error {
 	query := fmt.Sprintf(`
-		INSERT INTO %s (id, content, scheduled_sending_at, recipient_numbers, status)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO %s (
+			id,
+			content,
+			scheduled_sending_at,
+			recipient_numbers,
+			status,
+			created_at,
+			updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, strftime('%%s','now'), strftime('%%s','now'))
 	`, tableSchedule)
 
 	_, err := s.DB.ExecContext(ctx, query,
@@ -184,14 +213,15 @@ func (s *MySQLStorage) SaveMessage(ctx context.Context, message core.Message) er
 	return nil
 }
 
-func (s *MySQLStorage) UpdateMessage(ctx context.Context, message core.Message) error {
+func (s *Storage) UpdateMessage(ctx context.Context, message core.Message) error {
 	query := fmt.Sprintf(`
 		UPDATE %s
 			SET scheduled_sending_at = ?,
 				sent_at = ?,
 				retried_count = ?,
 				status = ?,
-				reason = ?
+				reason = ?,
+				updated_at = strftime('%%s','now')
 		WHERE id = ?
 	`, tableSchedule)
 
@@ -203,7 +233,6 @@ func (s *MySQLStorage) UpdateMessage(ctx context.Context, message core.Message) 
 		message.Reason,
 		message.ID,
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to update message: %w", err)
 	}

@@ -1,33 +1,14 @@
 services:
-  mysql:
-    image: bitnami/mysql:8.0
-    healthcheck:
-      test: "mysql --user=root --password=test1234 --execute \"SHOW DATABASES;\""
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    ports:
-      - 8306:3306
-    volumes:
-      - ../../../docs/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - mysql_data_wa_scheduler:/bitnami/mysql/data
-    environment:
-      - MYSQL_ROOT_PASSWORD=test1234
-      - MYSQL_DATABASE=idnremotescheduler
-
   server-scheduler:
     build:
       context: ../../../
       dockerfile: ./build/package/Dockerfile
-    depends_on:
-      mysql:
-        condition: service_healthy
     volumes:
       - ../../../cmd/web:/web
+      - sqlite_data_wa_scheduler:/data
     environment:
       - LISTEN_PORT=${LISTEN_PORT:-9866}
-      - MYSQL_DSN=${MYSQL_DSN:-root:test1234@tcp(mysql:3306)/idnremotescheduler?parseTime=true}
+      - DB_PATH=${DB_PATH:-/data/wa-scheduler.db}
       - DASHBOARD_CLIENT_USERNAME=${DASHBOARD_CLIENT_USERNAME:-admin}
       - DASHBOARD_CLIENT_PASSWORD=${DASHBOARD_CLIENT_PASSWORD:-admin}
       - WA_DEFAULT_NUMBERS=${WA_DEFAULT_NUMBERS}
@@ -38,4 +19,4 @@ services:
       - "9866:9866"
 
 volumes:
-  mysql_data_wa_scheduler:
+  sqlite_data_wa_scheduler:

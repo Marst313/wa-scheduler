@@ -1,4 +1,4 @@
-FROM golang:1.23.8-alpine3.20 AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /go/src/github.com/ghazlabs/wa-scheduler
 
 COPY go.mod go.sum ./

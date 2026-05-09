@@ -21,7 +21,7 @@ Available services:
 
 - `Server and Dashboard Service` => Handling dashboard and api requests from clients. For the API details see [this doc](./docs/rest_api.md).
 - `WhatsApp Publisher` => External Whatsapp publisher service. This service is responsible for sending messages to WhatsApp. Right now the built-in adapter supports [go-whatsapp-web-multidevice](https://github.com/aldinokemal/go-whatsapp-web-multidevice), but WA Scheduler does not manage its login, session, or deployment.
-- `Storage` => This service is responsible for storing all the message state. The database schema is available [here](./docs/db/schema.sql). Currently, it only supports MySQL.
+- `Storage` => This service is responsible for storing all the message state. It uses SQLite and persists data in a database file.
 
 ## Features
 
@@ -59,7 +59,7 @@ TBD
 | Variable Name               | Required | Default | Description                                                                                                                                      |
 | --------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `LISTEN_PORT`               | Yes      | `9866`  | Port number the server listens on                                                                                                                |
-| `MYSQL_DSN`                 | Yes      | –       | MySQL Data Source Name                                                                                                                           |
+| `DB_PATH`                   | Yes      | `/data/wa-scheduler.db` | SQLite database file path                                                                                                          |
 | `DASHBOARD_CLIENT_USERNAME` | Yes      | –       | Username for dashboard authentication                                                                                                            |
 | `DASHBOARD_CLIENT_PASSWORD` | Yes      | –       | Password for dashboard authentication                                                                                                            |
 | `WA_DEFAULT_NUMBERS`        | No       | –       | Comma-separated list of default numbers could be private numbers or group id WhatsApp. E.g. `6287822334455@s.whatsapp.net,120363020892687898@g.us` |
