@@ -8,6 +8,7 @@ require (
 	github.com/go-chi/render v1.0.3
 	github.com/go-co-op/gocron/v2 v2.16.1
 	github.com/google/uuid v1.6.0
+	github.com/jmoiron/sqlx v1.4.0
 	gopkg.in/validator.v2 v2.0.1
 	modernc.org/sqlite v1.50.0
 )

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/ghazlabs/wa-scheduler/internal/driver"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/go-resty/resty/v2"
+	"github.com/jmoiron/sqlx"
 
 	_ "modernc.org/sqlite"
 )
@@ -47,7 +47,7 @@ func main() {
 		}
 	}()
 
-	dbClient, err := sql.Open("sqlite", cfg.DBPath)
+	dbClient, err := sqlx.Connect("sqlite", cfg.DBPath)
 	if err != nil {
 		log.Fatalf("failed to initialize sqlite client: %v", err)
 	}

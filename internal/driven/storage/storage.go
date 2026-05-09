@@ -3,10 +3,12 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/ghazlabs/wa-scheduler/internal/core"
+	"github.com/jmoiron/sqlx"
 	"gopkg.in/validator.v2"
 )
 
@@ -15,11 +17,49 @@ const (
 )
 
 type StorageConfig struct {
-	DB *sql.DB `validate:"nonnil"`
+	DB *sqlx.DB `validate:"nonnil"`
 }
 
 type Storage struct {
 	StorageConfig
+}
+
+type messageRow struct {
+	ID                 string             `db:"id"`
+	Content            string             `db:"content"`
+	RecipientNumbers   string             `db:"recipient_numbers"`
+	ScheduledSendingAt int64              `db:"scheduled_sending_at"`
+	SentAt             sql.NullInt64      `db:"sent_at"`
+	RetriedCount       int                `db:"retried_count"`
+	Status             core.MessageStatus `db:"status"`
+	Reason             sql.NullString     `db:"reason"`
+	CreatedAt          int64              `db:"created_at"`
+	UpdatedAt          int64              `db:"updated_at"`
+}
+
+func (r messageRow) toCoreMessage() core.Message {
+	msg := core.Message{
+		ID:                 r.ID,
+		Content:            r.Content,
+		RecipientNumbers:   strings.Split(r.RecipientNumbers, ","),
+		ScheduledSendingAt: r.ScheduledSendingAt,
+		RetriedCount:       r.RetriedCount,
+		Status:             r.Status,
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
+	}
+
+	if r.SentAt.Valid {
+		sentAt := r.SentAt.Int64
+		msg.SentAt = &sentAt
+	}
+
+	if r.Reason.Valid {
+		reason := r.Reason.String
+		msg.Reason = &reason
+	}
+
+	return msg
 }
 
 func NewStorage(cfg StorageConfig) (*Storage, error) {
@@ -52,7 +92,7 @@ func (s *Storage) ensureSchema() error {
 		updated_at INTEGER NOT NULL DEFAULT (strftime('%%s','now'))
 	);`, tableSchedule)
 
-	if _, err := s.DB.Exec(query); err != nil {
+	if _, err := s.DB.ExecContext(context.Background(), query); err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
 
@@ -87,48 +127,14 @@ func (s *Storage) GetAllMessages(ctx context.Context, input core.GetAllMessagesI
 
 	query += " ORDER BY created_at DESC"
 
-	rows, err := s.DB.QueryContext(ctx, query, args...)
-	if err != nil {
+	var rows []messageRow
+	if err := s.DB.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("failed to query messages: %w", err)
 	}
-	defer rows.Close()
 
-	messages := make([]core.Message, 0)
-	for rows.Next() {
-		var msg core.Message
-		var recipientNumbers string
-		var sentAt sql.NullInt64
-		var reason sql.NullString
-
-		err := rows.Scan(
-			&msg.ID,
-			&msg.Content,
-			&recipientNumbers,
-			&msg.ScheduledSendingAt,
-			&sentAt,
-			&msg.RetriedCount,
-			&msg.Status,
-			&reason,
-			&msg.CreatedAt,
-			&msg.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-
-		msg.RecipientNumbers = strings.Split(recipientNumbers, ",")
-		if sentAt.Valid {
-			msg.SentAt = &sentAt.Int64
-		}
-		if reason.Valid {
-			msg.Reason = &reason.String
-		}
-
-		messages = append(messages, msg)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("row iteration error: %w", err)
+	messages := make([]core.Message, 0, len(rows))
+	for _, row := range rows {
+		messages = append(messages, row.toCoreMessage())
 	}
 
 	return messages, nil
@@ -148,41 +154,17 @@ func (s *Storage) GetMessage(ctx context.Context, id string) (*core.Message, err
 		updated_at
 	FROM %s WHERE id = ?`, tableSchedule)
 
-	row := s.DB.QueryRowContext(ctx, query, id)
-
-	var msg core.Message
-	var recipientNumbers string
-	var sentAt sql.NullInt64
-	var reason sql.NullString
-
-	err := row.Scan(
-		&msg.ID,
-		&msg.Content,
-		&recipientNumbers,
-		&msg.ScheduledSendingAt,
-		&sentAt,
-		&msg.RetriedCount,
-		&msg.Status,
-		&reason,
-		&msg.CreatedAt,
-		&msg.UpdatedAt,
-	)
+	var row messageRow
+	err := s.DB.GetContext(ctx, &row, query, id)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to scan row: %w", err)
+		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
 
-	msg.RecipientNumbers = strings.Split(recipientNumbers, ",")
-	if sentAt.Valid {
-		msg.SentAt = &sentAt.Int64
-	}
-	if reason.Valid {
-		msg.Reason = &reason.String
-	}
-
+	msg := row.toCoreMessage()
 	return &msg, nil
 }
 
@@ -197,16 +179,18 @@ func (s *Storage) SaveMessage(ctx context.Context, message core.Message) error {
 			created_at,
 			updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, strftime('%%s','now'), strftime('%%s','now'))
+		VALUES (:id, :content, :scheduled_sending_at, :recipient_numbers, :status, strftime('%%s','now'), strftime('%%s','now'))
 	`, tableSchedule)
 
-	_, err := s.DB.ExecContext(ctx, query,
-		message.ID,
-		message.Content,
-		message.ScheduledSendingAt,
-		strings.Join(message.RecipientNumbers, ","),
-		message.Status,
-	)
+	params := map[string]interface{}{
+		"id":                   message.ID,
+		"content":              message.Content,
+		"scheduled_sending_at": message.ScheduledSendingAt,
+		"recipient_numbers":    strings.Join(message.RecipientNumbers, ","),
+		"status":               message.Status,
+	}
+
+	_, err := s.DB.NamedExecContext(ctx, query, params)
 	if err != nil {
 		return fmt.Errorf("failed to insert message: %w", err)
 	}
@@ -216,23 +200,25 @@ func (s *Storage) SaveMessage(ctx context.Context, message core.Message) error {
 func (s *Storage) UpdateMessage(ctx context.Context, message core.Message) error {
 	query := fmt.Sprintf(`
 		UPDATE %s
-			SET scheduled_sending_at = ?,
-				sent_at = ?,
-				retried_count = ?,
-				status = ?,
-				reason = ?,
+			SET scheduled_sending_at = :scheduled_sending_at,
+				sent_at = :sent_at,
+				retried_count = :retried_count,
+				status = :status,
+				reason = :reason,
 				updated_at = strftime('%%s','now')
-		WHERE id = ?
+		WHERE id = :id
 	`, tableSchedule)
 
-	_, err := s.DB.ExecContext(ctx, query,
-		message.ScheduledSendingAt,
-		message.SentAt,
-		message.RetriedCount,
-		message.Status,
-		message.Reason,
-		message.ID,
-	)
+	params := map[string]interface{}{
+		"id":                   message.ID,
+		"scheduled_sending_at": message.ScheduledSendingAt,
+		"sent_at":              message.SentAt,
+		"retried_count":        message.RetriedCount,
+		"status":               message.Status,
+		"reason":               message.Reason,
+	}
+
+	_, err := s.DB.NamedExecContext(ctx, query, params)
 	if err != nil {
 		return fmt.Errorf("failed to update message: %w", err)
 	}
