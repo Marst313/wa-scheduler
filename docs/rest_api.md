@@ -330,4 +330,20 @@ Possible error responses from the API:
 
   An unexpected server-side failure. Inspect `msg` for detail.
 
+  - ID Not found
+
+  ```json
+  HTTP/1.1 404 Not Found
+  Content-Type: application/json
+
+  {
+    "ok": false,
+    "err": "ERR_MESSAGE_NOT_FOUND",
+    "msg": "message id not found",
+    "ts": 1735432224
+  }
+  ```
+
+  The WhatsApp session used by the publisher expired. Re-authenticate the publisher; scheduling may halt until then.
+
 [Back to Top](#rest-api)
