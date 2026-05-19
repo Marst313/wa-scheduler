@@ -10,7 +10,6 @@ import (
 	"github.com/ghazlabs/wa-scheduler/internal/core"
 )
 
-// mockService adalah implementasi dari core.Service
 type mockService struct{}
 
 func (m *mockService) InitializeService(ctx context.Context) {}
@@ -27,7 +26,6 @@ func (m *mockService) RetryMessage(ctx context.Context, input core.RetryMessageI
 	return nil
 }
 
-// newTestAPI membuat instance API untuk test
 func newTestAPI() *API {
 	api, _ := NewAPI(APIConfig{
 		Service:            &mockService{},
@@ -38,8 +36,6 @@ func newTestAPI() *API {
 	return api
 }
 
-// Test validasi endpoint GET /messages dengan status=failed
-// Expected result: response HTTP 200 OK
 func TestGetMessages_FailedStatus_Returns200(t *testing.T) {
 	api := newTestAPI()
 
@@ -54,8 +50,6 @@ func TestGetMessages_FailedStatus_Returns200(t *testing.T) {
 	}
 }
 
-// Test validasi endpoint GET /messages dengan status=scheduled
-// Expected result: response HTTP 200 OK
 func TestGetMessages_ScheduledStatus_Returns200(t *testing.T) {
 	api := newTestAPI()
 
@@ -70,8 +64,6 @@ func TestGetMessages_ScheduledStatus_Returns200(t *testing.T) {
 	}
 }
 
-// Test validasi endpoint GET /messages dengan status=sent
-// Expected result: response HTTP 200 OK
 func TestGetMessages_SentStatus_Returns200(t *testing.T) {
 	api := newTestAPI()
 
@@ -86,9 +78,6 @@ func TestGetMessages_SentStatus_Returns200(t *testing.T) {
 	}
 }
 
-// Test validasi endpoint GET /messages dengan status tidak valid
-// Expected result: response HTTP 400 Bad Request
-// dan body response mengandung pesan error
 func TestGetMessages_InvalidStatus_Returns400(t *testing.T) {
 	api := newTestAPI()
 
@@ -109,8 +98,6 @@ func TestGetMessages_InvalidStatus_Returns400(t *testing.T) {
 	}
 }
 
-// Test validasi endpoint GET /messages tanpa parameter status
-// Expected result: response HTTP 200 OK
 func TestGetMessages_NoStatus_Returns200(t *testing.T) {
 	api := newTestAPI()
 
