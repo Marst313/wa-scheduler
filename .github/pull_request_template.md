@@ -2,27 +2,22 @@
 
 Which issue does this PR address?
 
-<!-- e.g. Closes #123 or Fixes ghazlabs/wa-scheduler#45 -->
+Fixes ghazlabs/wa-scheduler#19
 
 ## Root Cause
 
-What caused the problem?
-
-<!-- Brief explanation of why the bug happened. For features, describe context or motivation. -->
+The API returned a generic error response when a message ID was not found, making it difficult for clients to identify the actual issue clearly.
 
 ## Changes
 
-What did you change to fix it?
+- Added a more declarative and explicit error message for missing message IDs.
+- Improved error handling for `core.ErrMessageNotFound`.
+- Returned a proper `404 Not Found` response with a clearer error description.
 
-<!-- Summarize the main changes (files/areas, approach). -->
 
-## Testing
+### Manual Testing
 
-Confirm testing and no breaking changes.
-
-- [ ] Ran `make test` from the repository root
-- [ ] Added or updated tests so new functionality is covered (or explained below if tests are not applicable)
-- [ ] (Optional) Local Docker smoke test per [README](https://github.com/ghazlabs/wa-scheduler/blob/main/README.md)
-- [ ] No breaking changes, or documented below if any
-
-<!-- Add manual test steps if needed. -->
+- Request message detail using a non-existent message ID.
+- Verify the API returns:
+  - HTTP `404 Not Found`
+  - Clear error message indicating the message ID was not found.
