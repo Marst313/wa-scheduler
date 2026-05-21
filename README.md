@@ -86,7 +86,7 @@ For broader deployment notes or questions, check [existing issues](https://githu
 
 Thank you for your interest in contributing to WA Scheduler.
 
-**Contributor guide:** **[CONTRIBUTING.md](./CONTRIBUTING.md)** (`@CONTRIBUTING.md`) — claiming issues, feature approvals vs bugs, `go test ./...`, and Docker smoke checks.
+**Contributor guide:** **[CONTRIBUTING.md](./CONTRIBUTING.md)** (`@CONTRIBUTING.md`) — claiming issues, feature approvals vs bugs, `make test`, and Docker smoke checks.
 
 There are many ways to contribute, and most of them don’t require writing code.
 
@@ -121,7 +121,7 @@ Code is just one piece of the puzzle—and contributing doesn’t always mean wr
     git checkout -b your-feature-name
     ```
 
-5. Run **`go test ./...`** before pushing.
+5. Run **`make test`** before pushing.
 6. Open a pull request.
 
 ## License

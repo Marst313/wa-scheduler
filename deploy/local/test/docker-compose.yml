@@ -1,0 +1,7 @@
+services:
+  test:
+    image: golang:1.25-alpine
+    working_dir: /go/src/github.com/ghazlabs/wa-scheduler
+    entrypoint: "go test -short -v -timeout=3m ./..."
+    volumes:
+      - ../../../:/go/src/github.com/ghazlabs/wa-scheduler

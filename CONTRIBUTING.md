@@ -7,7 +7,7 @@ Thanks for helping improve WA Scheduler. This repo is intentionally kept approac
 1. Fork the repository ([Fork](https://github.com/ghazlabs/wa-scheduler/fork)).
 2. Clone your fork and create a branch (`git checkout -b short-topic`).
 3. Make your changes.
-4. From the repository root, run **`go test ./...`** and fix anything that fails before opening a PR.
+4. From the repository root, run **`make test`** and fix anything that fails before opening a PR.
 5. Open a pull request against this repository.
 
 Optional integration check: run the app locally with Docker as described in the [README](README.md) (Getting Started).
