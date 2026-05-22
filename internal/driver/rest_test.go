@@ -24,7 +24,8 @@ func (m *mockService) GetAllMessages(ctx context.Context, input core.GetAllMessa
 		}, nil
 	}
 	return []core.Message{
-		{ID: "test-test-1", Status: input.Status},
+		{ID: "test-1", Status: input.Status},
+		{ID: "test-2", Status: input.Status},
 	}, nil
 }
 
@@ -52,87 +53,81 @@ func parseBody(w *httptest.ResponseRecorder) map[string]interface{} {
 	return body
 }
 
-func TestGetMessages_FailedStatus_Returns200WithFailedMessages(t *testing.T) {
-	api := newTestAPI()
+func TestGetAllMessages(t *testing.T) {
+	testCases := []struct {
+		name              string
+		query             string
+		expectedStatus    int
+		expectedOk        bool
+		expectedMsgStatus string
+		expectedError     bool
+	}{
+		{
+			name:              "should return 200 with failed messages when status = failed",
+			query:             "/messages?status=failed",
+			expectedStatus:    http.StatusOK,
+			expectedOk:        true,
+			expectedMsgStatus: string(core.MessageStatusFailed),
+		},
+		{
+			name:              "should return 200 with scheduled messages when status = scheduled",
+			query:             "/messages?status=scheduled",
+			expectedStatus:    http.StatusOK,
+			expectedOk:        true,
+			expectedMsgStatus: string(core.MessageStatusScheduled),
+		},
+		{
+			name:              "should return 200 sent messages when status = sent",
+			query:             "/messages?status=sent",
+			expectedStatus:    http.StatusOK,
+			expectedOk:        true,
+			expectedMsgStatus: string(core.MessageStatusSent),
+		},
+		{
+			name:           "should return 400 when status is invalid",
+			query:          "/messages?status=invalid",
+			expectedStatus: http.StatusBadRequest,
+			expectedOk:     false,
+			expectedError:  true,
+		},
+		{
+			name:           "should return 200 with all messages when no status filter",
+			query:          "/messages",
+			expectedStatus: http.StatusOK,
+			expectedOk:     true,
+		},
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/messages?status=failed", nil)
-	req.SetBasicAuth("admin", "admin")
-	w := httptest.NewRecorder()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			api := newTestAPI()
 
-	api.serveGetMessages(w, req)
+			req := httptest.NewRequest(http.MethodGet, tc.query, nil)
+			req.SetBasicAuth("admin", "admin")
+			w := httptest.NewRecorder()
 
-	body := parseBody(w)
-	data := body["data"].([]interface{})
-	firstMessage := data[0].(map[string]interface{})
+			api.serveGetMessages(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.True(t, body["ok"].(bool))
-	assert.NotEmpty(t, data)
-	assert.Equal(t, string(core.MessageStatusFailed), firstMessage["status"])
-}
+			body := parseBody(w)
 
-func TestGetMessages_ScheduledStatus_Returns200(t *testing.T) {
-	api := newTestAPI()
+			assert.Equal(t, tc.expectedStatus, w.Code)
+			assert.Equal(t, tc.expectedOk, body["ok"].(bool))
 
-	req := httptest.NewRequest(http.MethodGet, "/messages?status=scheduled", nil)
-	req.SetBasicAuth("admin", "admin")
-	w := httptest.NewRecorder()
+			if tc.expectedError {
+				assert.NotNil(t, body["err"])
+				return
+			}
 
-	api.serveGetMessages(w, req)
+			data, ok := body["data"].([]interface{})
+			assert.True(t, ok)
+			assert.NotEmpty(t, data)
 
-	body := parseBody(w)
-	data := body["data"].([]interface{})
-	firstMessage := data[0].(map[string]interface{})
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.NotEmpty(t, data)
-	assert.Equal(t, string(core.MessageStatusScheduled), firstMessage["status"])
-}
-
-func TestGetMessages_SentStatus_Returns200(t *testing.T) {
-	api := newTestAPI()
-
-	req := httptest.NewRequest(http.MethodGet, "/messages?status=sent", nil)
-	req.SetBasicAuth("admin", "admin")
-	w := httptest.NewRecorder()
-
-	api.serveGetMessages(w, req)
-
-	body := parseBody(w)
-	data := body["data"].([]interface{})
-	firstMessage := data[0].(map[string]interface{})
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.NotEmpty(t, data)
-	assert.Equal(t, string(core.MessageStatusSent), firstMessage["status"])
-}
-
-func TestGetMessages_InvalidStatus_Returns400(t *testing.T) {
-	api := newTestAPI()
-
-	req := httptest.NewRequest(http.MethodGet, "/messages?status=invalid", nil)
-	req.SetBasicAuth("admin", "admin")
-	w := httptest.NewRecorder()
-
-	api.serveGetMessages(w, req)
-
-	body := parseBody(w)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.False(t, body["ok"].(bool))
-	assert.Equal(t, "invalid status", body["msg"])
-}
-
-func TestGetMessages_NoStatus_Returns200(t *testing.T) {
-	api := newTestAPI()
-
-	req := httptest.NewRequest(http.MethodGet, "/messages", nil)
-	req.SetBasicAuth("admin", "admin")
-	w := httptest.NewRecorder()
-
-	api.serveGetMessages(w, req)
-	body := parseBody(w)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.True(t, body["ok"].(bool))
+			if tc.expectedMsgStatus != "" {
+				for _, item := range data {
+					msg := item.(map[string]interface{})
+					assert.Equal(t, tc.expectedMsgStatus, msg["status"])
+				}
+			}
+		})
+	}
 }
