@@ -344,6 +344,6 @@ Possible error responses from the API:
   }
   ```
 
-  The WhatsApp session used by the publisher expired. Re-authenticate the publisher; scheduling may halt until then.
+  The specified message ID could not be found. Verify that the message exists and that the correct ID was provided.
 
 [Back to Top](#rest-api)

@@ -37,7 +37,10 @@ func (m *mockService) SendMessage(ctx context.Context, input core.ScheduleMessag
 }
 
 func (m *mockService) RetryMessage(ctx context.Context, input core.RetryMessageInput) error {
-	return core.ErrMessageNotFound
+	if input.ID == "200" {
+		return core.ErrMessageNotFound
+	}
+	return nil
 }
 
 func newTestAPI() *API {
@@ -137,38 +140,73 @@ func TestGetAllMessages(t *testing.T) {
 	}
 }
 
-func TestRetryMessage_MessageNotFound_Returns404(t *testing.T) {
-	api := newTestAPI()
-
-	reqBody := RetryMessageRequest{
-		ScheduledSendingAt: 1234567890,
+func TestRetryMessage(t *testing.T) {
+	tests := []struct {
+		name           string
+		messageID      string
+		expectedStatus int
+		expectedOK     bool
+		expectedErr    string
+		expectedMsg    string
+	}{
+		{
+			name:           "message not found",
+			messageID:      "200",
+			expectedStatus: http.StatusNotFound,
+			expectedOK:     false,
+			expectedErr:    "ERR_MESSAGES_NOT_FOUND",
+			expectedMsg:    "message id not found",
+		},
+		{
+			name:           "message found",
+			messageID:      "1",
+			expectedStatus: http.StatusOK,
+			expectedOK:     true,
+			expectedErr:    "",
+			expectedMsg:    "",
+		},
 	}
 
-	jsonBody, _ := json.Marshal(reqBody)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			api := newTestAPI()
 
-	req := httptest.NewRequest(
-		http.MethodPost,
-		"/messages/200/retry",
-		bytes.NewBuffer(jsonBody),
-	)
+			reqBody := RetryMessageRequest{
+				ScheduledSendingAt: 1234567890,
+			}
 
-	req.SetBasicAuth("admin", "admin")
+			jsonBody, _ := json.Marshal(reqBody)
 
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "200")
+			req := httptest.NewRequest(
+				http.MethodPost,
+				"/messages/"+tt.messageID+"/retry",
+				bytes.NewBuffer(jsonBody),
+			)
 
-	req = req.WithContext(
-		context.WithValue(req.Context(), chi.RouteCtxKey, rctx),
-	)
+			req.SetBasicAuth("admin", "admin")
 
-	w := httptest.NewRecorder()
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("id", tt.messageID)
 
-	api.serveRetryMessage(w, req)
+			req = req.WithContext(
+				context.WithValue(req.Context(), chi.RouteCtxKey, rctx),
+			)
 
-	body := parseBody(w)
+			w := httptest.NewRecorder()
 
-	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.False(t, body["ok"].(bool))
-	assert.Equal(t, "ERR_MESSAGES_NOT_FOUND", body["err"])
-	assert.Equal(t, "message id not found", body["msg"])
+			api.serveRetryMessage(w, req)
+
+			body := parseBody(w)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			assert.Equal(t, tt.expectedOK, body["ok"])
+
+			if tt.expectedErr != "" {
+				assert.Equal(t, tt.expectedErr, body["err"])
+			}
+			if tt.expectedMsg != "" {
+				assert.Equal(t, tt.expectedMsg, body["msg"])
+			}
+		})
+	}
 }
